@@ -53,7 +53,7 @@ int getChildStatus (int status) {
     }
 }
 
-int printChild(struct ChildProcess c){
+int printChild(ChildProcess c){
     printf("Child Process <%d> \n", c.pid);
     printf("-> task: %s \n", c.task);
     printf("-> status: %d \n", c.status);
@@ -66,7 +66,7 @@ int printChild(struct ChildProcess c){
 int main() {
 
     // varsmk
-    struct Program program;
+    Program program;
     string input;
     int pId;
     int i, j;
@@ -114,47 +114,47 @@ int main() {
             }
         }
 
-        struct ChildProcess child[program.size];
+        ChildProcess childs[program.size];
 
         //fork
         for (i = 0; i < program.size; i++) {
-            if ((child[i].pid=fork()) == 0) {
+            if ((childs[i].pid=fork()) == 0) {
 
                 execvp(program.command[i].progName, program.command[i].args);
 
                 //perror("Execvp error");
                 _exit(errno);
             }
-            if (child[i].pid < 0) {
+            if (childs[i].pid < 0) {
                 perror("Fork error");
             }
         }
 
         //wait for execution
         for (i = 0; i < program.size; i++) {
-            if (child[i].pid > 0) {
+            if (childs[i].pid > 0) {
                 int status;
-                child[i].task = program.command[i].toString; //todo -> change to program.command[i].args[0]
+                childs[i].task = program.command[i].toString; //todo -> change to program.command[i].args[0]
 
                 //measure time
-                child[i].startTime = clock();
-                waitpid(child[i].pid, &status, 0);
-                child[i].endTime = clock();
+                childs[i].startTime = clock();
+                waitpid(childs[i].pid, &status, 0);
+                childs[i].endTime = clock();
 
-                child[i].status = getChildStatus(&status);
+                childs[i].status = getChildStatus(&status);
                 if (status > 0) { //error
-                    child[i].exitedWithError = true;
+                    childs[i].exitedWithError = true;
                 }
             } else {
                 //process never started
-                child[i].exitedWithError = true;
+                childs[i].exitedWithError = true;
             }
         }
 
 
-        debug(foreach (struct ChildProcess *c, child) printChild(*c);)
+        debug(foreach(ChildProcess *c, childs) printChild(*c);)
 
-        foreach (struct ChildProcess *c, child) {
+        foreach (ChildProcess *c, childs) {
             if (c->exitedWithError) {
                 printf("%s: [execution error]\n", c->task);
                 continue;
@@ -165,11 +165,11 @@ int main() {
 
         /*print
         for (i = 0; i < program.size; i++) {
-            if (child[i].exitedWithError != 0) {
+            if (childs[i].exitedWithError != 0) {
                 printf("%s: [execution error]");
                 continue;
             }
-            printf("%s: user time = %d \n", program.command[i].progName, child[i].endTime - child[i].startTime);
+            printf("%s: user time = %d \n", program.command[i].progName, childs[i].endTime - childs[i].startTime);
         }
 
         //end test
@@ -187,7 +187,7 @@ int main() {
                 exit(EXIT_FAILURE);
             }
             else if (pId == 0){
-                /* child process
+                /* childs process
 
                 childStatus = execvp(program.command[i].progName, program.command[i].args);
                 perror(1);

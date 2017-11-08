@@ -21,12 +21,14 @@ struct Command{
     string args[MAX_ARGS];
 };
 
-struct Program{
+#define Program struct Prog
+struct Prog{
     struct Command command[MAX_COMMAND];
     int size;
 };
 
-struct ChildProcess{
+#define ChildProcess struct CProcess
+struct CProcess{
     clock_t startTime;
     clock_t endTime;
     pid_t pid;
