@@ -1,8 +1,6 @@
-#include <unistd.h>
-#include <sys/wait.h>
-#include <time.h>
 #include "refs.h"
 
+bool debugging = true;
 
 string readInput(void) {
     char * line = malloc(100), * linep = line;
@@ -55,9 +53,19 @@ int getChildStatus (int status) {
     }
 }
 
+int printChild(struct ChildProcess c){
+    printf("Child Process <%d> \n", c.pid);
+    printf("-> task: %s \n", c.task);
+    printf("-> status: %d \n", c.status);
+    printf("-> startTime: %d \n", c.startTime);
+    printf("-> endTime: %d \n", c.endTime);
+    printf("-> elipsed time: %d \n", c.endTime - c.startTime);
+    printf("-> failed: %d \n\n", c.exitedWithError);
+}
+
 int main() {
 
-    // vars
+    // varsmk
     struct Program program;
     string input;
     int pId;
@@ -114,8 +122,8 @@ int main() {
 
                 execvp(program.command[i].progName, program.command[i].args);
 
-                perror("Execvp error");
-                _exit(1);
+                //perror("Execvp error");
+                _exit(errno);
             }
             if (child[i].pid < 0) {
                 perror("Fork error");
@@ -126,32 +134,36 @@ int main() {
         for (i = 0; i < program.size; i++) {
             if (child[i].pid > 0) {
                 int status;
+                child[i].task = program.command[i].toString; //todo -> change to program.command[i].args[0]
+
+                //measure time
                 child[i].startTime = clock();
                 waitpid(child[i].pid, &status, 0);
                 child[i].endTime = clock();
-                child[i].status = getChildStatus(status);
+
+                child[i].status = getChildStatus(&status);
                 if (status > 0) { //error
                     child[i].exitedWithError = true;
                 }
             } else {
-                //process did never started
+                //process never started
                 child[i].exitedWithError = true;
             }
         }
 
-        /*
-        for (i = 0; i < program.size; i++) {
-            printf("Command: %d: %s \n", i, program.command[i].toString);
-            printf("pid: %d \n", child[i].pid);
-            printf("status: %d \n", child[i].status);
-            printf("startTime: %d \n", child[i].startTime);
-            printf("endTime: %d \n", child[i].endTime);
-            printf("elipsed time: %d \n", child[i].endTime - child[i].startTime);
-            printf("failed: %d \n\n", child[i].exitedWithError);
-        }
-         */
 
-        //print
+        debug(foreach (struct ChildProcess *c, child) printChild(*c);)
+
+        foreach (struct ChildProcess *c, child) {
+            if (c->exitedWithError) {
+                printf("%s: [execution error]\n", c->task);
+                continue;
+            }
+            printf("%s: user time = %d\n", c->task, c->endTime - c->startTime);
+
+        }
+
+        /*print
         for (i = 0; i < program.size; i++) {
             if (child[i].exitedWithError != 0) {
                 printf("%s: [execution error]");
@@ -201,7 +213,7 @@ int main() {
         }
 
         printf("sum of user times = %d \n", sum_of_usertime); */
-        printf("run completed.\n");
+        printf("\n --> run completed.\n");
     }
 
     return 0;
