@@ -1,7 +1,12 @@
 #include "refs.h"
 
-bool debugging = false;
+//debug mode
+bool debugging = true;
 
+//global Vars
+bool isInterrupted = false;
+
+//input management
 string readInput(void) {
     char * line = malloc(100), * linep = line;
     size_t lenmax = 100, len = lenmax;
@@ -33,6 +38,41 @@ string readInput(void) {
     *line = '\0';
     return linep;
 }
+string removeDoubledEmptySpaces(string str){
+    char *from, *to;
+    int spc=0;
+    to=from=str;
+    while(1){
+        if(spc && *from == ' ' && to[-1] == ' ')
+            ++from;
+        else {
+            spc = (*from==' ')? 1 : 0;
+            *to++ = *from++;
+            if(!to[-1])break;
+        }
+    }
+    return str;
+}
+string trimwhitespace(string str){
+    char *end;
+
+    // Trim leading space
+    while(isspace((unsigned char)*str)) str++;
+
+    if(*str == 0)  // All spaces?
+        return str;
+
+    // Trim trailing space
+    end = str + strlen(str) - 1;
+    while(end > str && isspace((unsigned char)*end)) end--;
+
+    // Write new null terminator
+    *(end+1) = 0;
+
+    return str;
+}
+
+//ChildProcess Functions
 int printChild(ChildProcess c){
     printf("Child Process <%d> \n", c.pid);
     printf("-> task: %s \n", c.task);
@@ -42,18 +82,14 @@ int printChild(ChildProcess c){
     printf("-> failed: %d \n\n", c.exitedWithError);
 }
 
-void printAllChildProcesses(ChildProcess c[]){
-
-}
-
+//handler
 void sigint_handler(){
-    printf("\nSIGNAL INTERRUPT\n");
-    exit(11);
+    isInterrupted = true;
 }
 
 int main() {
 
-    // varsmk
+    // vars
     Program program;
     string input;
     int pId;
@@ -64,7 +100,7 @@ int main() {
     signal(SIGINT, sigint_handler);
 
     //main routine
-    while(true){
+    while(!isInterrupted){
 
         printf("> ");
         sum_of_usertime = 0;
@@ -84,6 +120,11 @@ int main() {
         input = readInput();
         if (strlen(input) > 500) perror("IndexOutOfBound: input too long");
         if (input == NULL) exit(0); //todo
+
+        debug(printf(input));
+        input = removeDoubledEmptySpaces(input);
+        //todo: remove leading whitespace before semic
+        debug(printf(input));
 
         //put input into peaces
         string part = strtok(input, ";");
@@ -107,8 +148,6 @@ int main() {
         }
 
         ChildProcess childProcess[program.size];
-
-
 
         //fork
         for (i = 0; i < program.size; i++) {
@@ -140,6 +179,7 @@ int main() {
 
         debug(foreach(ChildProcess *c, childProcess) printChild(*c);)
 
+        //print user times
         foreach (ChildProcess *c, childProcess) {
             if (c->exitedWithError) {
                 printf("%s: [execution error]\n", c->task);
@@ -151,9 +191,12 @@ int main() {
             sum_of_usertime += c->userTime;
         }
 
-
-        printf("sum of user times = %d \n", sum_of_usertime);
+        //print sum of usertimes
+        if (sum_of_usertime == 0) printf("Nothing to be done\n"); else printf("sum of user times = %d \n", sum_of_usertime);
     }
+
+    //code after ctrl+C
+    //....
 
     return 0;
 }
