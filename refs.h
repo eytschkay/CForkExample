@@ -7,3 +7,4 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <errno.h>
+#include <sys/times.h>

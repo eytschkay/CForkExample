@@ -1,6 +1,6 @@
 #include "refs.h"
 
-bool debugging = true;
+bool debugging = false;
 
 string readInput(void) {
     char * line = malloc(100), * linep = line;
@@ -33,34 +33,22 @@ string readInput(void) {
     *line = '\0';
     return linep;
 }
-
-int getChildStatus (int status) {
-    if (WIFEXITED (status)) {
-        //printf ("Kind normal beendet mit Rückgabewert %d\n", WEXITSTATUS(status));
-        return 0;
-    }
-    else if (WIFSIGNALED (status)) {
-        /* printf ("Kind mit Signalnummer %d beendet\n", WTERMSIG(status));
-        /* WCOREDUMP könnte hier stehen */
-        return WTERMSIG(status);
-    }
-    else if (WIFSTOPPED (status)) {
-        /*printf ("Kind wurde angehalten mit Signalnummer %d\n",
-                WSTOPSIG(status));
-        /* I.d.R. wird dies SIGSTOP sein, aber es gibt */
-        /* ja auch noch das ptrace()-Interface.        */
-        return -1;
-    }
-}
-
 int printChild(ChildProcess c){
     printf("Child Process <%d> \n", c.pid);
     printf("-> task: %s \n", c.task);
-    printf("-> status: %d \n", c.status);
     printf("-> startTime: %d \n", c.startTime);
     printf("-> endTime: %d \n", c.endTime);
     printf("-> elipsed time: %d \n", c.endTime - c.startTime);
     printf("-> failed: %d \n\n", c.exitedWithError);
+}
+
+void printAllChildProcesses(ChildProcess c[]){
+
+}
+
+void sigint_handler(){
+    printf("\nSIGNAL INTERRUPT\n");
+    exit(11);
 }
 
 int main() {
@@ -72,11 +60,15 @@ int main() {
     int i, j;
     int sum_of_usertime;
 
+    //run signal handler for sigint
+    signal(SIGINT, sigint_handler);
+
     //main routine
     while(true){
 
         printf("> ");
         sum_of_usertime = 0;
+
 
         // init/reset program
         program.size = 0;
@@ -116,39 +108,32 @@ int main() {
 
         ChildProcess childProcess[program.size];
 
+
+
         //fork
         for (i = 0; i < program.size; i++) {
             if ((childProcess[i].pid=fork()) == 0) {
-
-                //childProcess[i].startTime = clock(); //todo check where this belongs
                 execvp(program.command[i].progName, program.command[i].args);
-
-                //perror("Execvp error");
-                _exit(errno);
+                _exit(errno); //only reached if execvp fails
             }
-            if (childProcess[i].pid < 0) {
-                perror("Fork error");
-            }
+            if (childProcess[i].pid < 0) perror("Fork error");
         }
 
         //wait for execution
         for (i = 0; i < program.size; i++) {
             if (childProcess[i].pid > 0) {
                 int status;
-                childProcess[i].task = program.command[i].toString; //todo -> change to program.command[i].args[0]
+                childProcess[i].task = program.command[i].progName;
 
                 //measure time
-                childProcess[i].startTime = clock();
+                childProcess[i].startTime = times(&childProcess[i].init_tms);
                 waitpid(childProcess[i].pid, &status, 0);
-                childProcess[i].endTime = clock();
+                childProcess[i].endTime = times(&childProcess[i].end_tms);
 
-                childProcess[i].status = getChildStatus(&status);
-                if (status > 0) { //error
-                    childProcess[i].exitedWithError = true;
-                }
-            } else {
-                //process never started
-                childProcess[i].exitedWithError = true;
+                if (status > 0) childProcess[i].exitedWithError = true; //error in childProcess
+            }
+            else {
+                childProcess[i].exitedWithError = true; //child did not start, error
             }
         }
 
@@ -158,63 +143,16 @@ int main() {
         foreach (ChildProcess *c, childProcess) {
             if (c->exitedWithError) {
                 printf("%s: [execution error]\n", c->task);
+                c->userTime = -1;
                 continue;
             }
-            printf("%s: user time = %d\n", c->task, c->endTime - c->startTime);
-
+            c->userTime = c->endTime - c->startTime;
+            printf("%s: user time = %d\n", c->task, c->userTime);
+            sum_of_usertime += c->userTime;
         }
 
-        /*print
-        for (i = 0; i < program.size; i++) {
-            if (childProcess[i].exitedWithError != 0) {
-                printf("%s: [execution error]");
-                continue;
-            }
-            printf("%s: user time = %d \n", program.command[i].progName, childProcess[i].endTime - childProcess[i].startTime);
-        }
 
-        //end test
-
-
-
-        /*
-        for(i=0; i < program.size; i++){
-            int childStatus;
-            clock_t before, difference;
-
-            pId = fork(); /* Hier wird eine Kopie des laufenden Prozesses erzeugt!
-            if (pId < 0) {
-                perror("fork failed");
-                exit(EXIT_FAILURE);
-            }
-            else if (pId == 0){
-                /* childProcess process
-
-                childStatus = execvp(program.command[i].progName, program.command[i].args);
-                perror(1);
-            }
-            else {
-                /* Vaterprozess; n = Prozess-ID des Kindes
-                before = clock();
-                pId = wait(&childStatus);
-                difference = clock() - before;
-
-                switch(getChildStatus(childStatus))
-                {
-                    case 0:
-                        printf("%s: user time = %d \n", program.command[i].progName, difference);
-                        sum_of_usertime += difference;
-                        break;
-                    default:
-                        printf("%s: %s\n", program.command[i].progName, "[execution error]");
-                }
-
-                /* In "&status" erscheint der mit "return ...;" aus main() zurückgegebene Wert!
-            }
-        }
-
-        printf("sum of user times = %d \n", sum_of_usertime); */
-        printf("\n --> run completed.\n");
+        printf("sum of user times = %d \n", sum_of_usertime);
     }
 
     return 0;

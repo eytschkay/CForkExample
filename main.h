@@ -1,4 +1,4 @@
-
+#include <sys/times.h>
 
 #define debug(task) if (debugging) task
 
@@ -32,9 +32,11 @@ struct CProcess{
     clock_t startTime;
     clock_t endTime;
     pid_t pid;
-    int status;
+    int userTime;
     bool exitedWithError;
     string task;
+    struct tms init_tms;
+    struct tms end_tms;
 };
 
 string readInput(void);
