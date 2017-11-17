@@ -73,13 +73,13 @@ string trimwhitespace(string str){
 }
 
 //ChildProcess Functions
-int printChild(ChildProcess c){
+void printChild(ChildProcess c){
     printf("Child Process <%d> \n", c.pid);
     printf("-> task: %s \n", c.task);
-    printf("-> startTime: %d \n", c.startTime);
-    printf("-> endTime: %d \n", c.endTime);
-    printf("-> elipsed time: %d \n", c.endTime - c.startTime);
-    printf("-> failed: %d \n\n", c.exitedWithError);
+    printf("-> startTime: %d \n", (int) c.startTime);
+    printf("-> endTime: %d \n", (int) c.endTime);
+    printf("-> elipsed time: %d \n", (int) (c.endTime - c.startTime));
+    printf("-> failed: %d \n\n", (int) c.exitedWithError);
 }
 
 //handler
@@ -92,7 +92,6 @@ int main() {
     // vars
     Program program;
     string input;
-    int pId;
     int i, j;
     int sum_of_usertime;
 
@@ -121,10 +120,8 @@ int main() {
         if (strlen(input) > 500) perror("IndexOutOfBound: input too long");
         if (input == NULL) exit(0); //todo
 
-        debug(printf(input));
         input = removeDoubledEmptySpaces(input);
         //todo: remove leading whitespace before semic
-        debug(printf(input));
 
         //put input into peaces
         string part = strtok(input, ";");
