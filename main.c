@@ -1,7 +1,7 @@
 #include "refs.h"
 
 //debug mode
-bool debugging = true;
+bool debugging = false;
 
 //global Vars
 bool isInterrupted = false;
@@ -53,24 +53,53 @@ string removeDoubledEmptySpaces(string str){
     }
     return str;
 }
-string trimwhitespace(string str){
-    char *end;
+// You must free the result if result is non-NULL.
+char *str_replace(char *orig, char *rep, char *with) {
+    char *result; // the return string
+    char *ins;    // the next insert point
+    char *tmp;    // varies
+    int len_rep;  // length of rep (the string to remove)
+    int len_with; // length of with (the string to replace rep with)
+    int len_front; // distance between rep and end of last rep
+    int count;    // number of replacements
 
-    // Trim leading space
-    while(isspace((unsigned char)*str)) str++;
+    // sanity checks and initialization
+    if (!orig || !rep)
+        return NULL;
+    len_rep = strlen(rep);
+    if (len_rep == 0)
+        return NULL; // empty rep causes infinite loop during count
+    if (!with)
+        with = "";
+    len_with = strlen(with);
 
-    if(*str == 0)  // All spaces?
-        return str;
+    // count the number of replacements needed
+    ins = orig;
+    for (count = 0; tmp = strstr(ins, rep); ++count) {
+        ins = tmp + len_rep;
+    }
 
-    // Trim trailing space
-    end = str + strlen(str) - 1;
-    while(end > str && isspace((unsigned char)*end)) end--;
+    tmp = result = malloc(strlen(orig) + (len_with - len_rep) * count + 1);
 
-    // Write new null terminator
-    *(end+1) = 0;
+    if (!result)
+        return NULL;
 
-    return str;
+    // first time through the loop, all the variable are set correctly
+    // from here on,
+    //    tmp points to the end of the result string
+    //    ins points to the next occurrence of rep in orig
+    //    orig points to the remainder of orig after "end of rep"
+    while (count--) {
+        ins = strstr(orig, rep);
+        len_front = ins - orig;
+        tmp = strncpy(tmp, orig, len_front) + len_front;
+        tmp = strcpy(tmp, with) + len_with;
+        orig += len_front + len_rep; // move to next "end of rep"
+    }
+    strcpy(tmp, orig);
+    return result;
 }
+
 
 //ChildProcess Functions
 void printChild(ChildProcess c){
@@ -103,6 +132,7 @@ int main() {
 
         printf("> ");
         sum_of_usertime = 0;
+        memset(input, 0, sizeof input);
 
 
         // init/reset program
@@ -115,13 +145,15 @@ int main() {
             }
         }
 
-        //read input
-        input = readInput();
-        if (strlen(input) > 500) perror("IndexOutOfBound: input too long");
-        if (input == NULL) exit(0); //todo
+
+        //get Input
+        if (fgets(input, 500, stdin) == NULL) {
+            printf("Error %d\n", errno);
+            exit(EXIT_FAILURE);
+        }
 
         input = removeDoubledEmptySpaces(input);
-        //todo: remove leading whitespace before semic
+        input = str_replace(input, " ;", ";");
 
         //put input into peaces
         string part = strtok(input, ";");
@@ -162,9 +194,10 @@ int main() {
                 childProcess[i].task = program.command[i].progName;
 
                 //measure time
-                childProcess[i].startTime = times(&childProcess[i].init_tms);
-                waitpid(childProcess[i].pid, &status, 0);
-                childProcess[i].endTime = times(&childProcess[i].end_tms);
+                childProcess[i].startTime = times(&childProcess[i].init_tms.tms_cutime);
+                wait(&status);
+                //waitpid(childProcess[i].pid, &status, 0);
+                childProcess[i].endTime = times(&childProcess[i].end_tms.tms_cutime);
 
                 if (status > 0) childProcess[i].exitedWithError = true; //error in childProcess
             }
@@ -189,7 +222,7 @@ int main() {
         }
 
         //print sum of usertimes
-        if (sum_of_usertime == 0) printf("Nothing to be done\n"); else printf("sum of user times = %d \n", sum_of_usertime);
+        if (program.size != 0) printf("sum of user times = %d \n", sum_of_usertime);
     }
 
     //code after ctrl+C
