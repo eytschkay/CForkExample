@@ -1,0 +1,11 @@
+one -arg1 -arg2 -ar3; two -arg1; three -arg1;
+
+cd ~/Desktop; mkdir1 test; mkdir2 test2; mkdir3 test3 test4 >nul;
+
+mkdir test1; mkdir test2; sleep 10; mkdir test3; rdir test1; rmdir test2; rmdir test3;
+
+
+ls -l; sleep 2; history -c;
+
+
+echo 1; echo 2; echo 3; echco "I will fail"; echo 5;

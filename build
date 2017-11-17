@@ -1,0 +1,54 @@
+#!/bin/bash
+
+#place this file in ur sources root
+
+#change personal data here
+SourceFiles=('main.h' 'main.c' 'refs.h' 'BS-HU1.TEAM' 'mkhu1')
+FilesToBeCompiled=('main.c')
+userId="hkgl29"
+execName="hu1"
+
+#controls
+supressGccWarnings=false	#prevents gcc from showing warnings while compiling
+saveGccWarnings=true		#not possible if supressGccWarnings = true
+
+clear
+printf "build started \n\n"
+
+if [ -d "$userId" ]; then
+  printf " -> removing old files\n"
+  rm -rf "$userId" 
+fi
+
+printf " -> creating out dir\n"
+mkdir "$userId"
+
+printf " -> copy source files\n";
+for i in "${SourceFiles[@]}"
+do 
+  cp "$i" "./$userId/$i"
+done
+
+printf " -> compiling files\n"
+
+for i in "${FilesToBeCompiled[@]}"
+do 
+  if [ "$supressGccWarnings" = true ]; then
+    gcc -Wall -o "./$userId/$execName" "./$userId/$i" 2> gccWarnings.tmp
+    rm gccWarnings.tmp
+  elif [ "$saveGccWarnings" = true ]; then
+    gcc -Wall -o "./$userId/$execName" "./$userId/$i" 2> "./$t.gccmessages"
+  else
+    gcc -Wall -o "./$userId/$execName" "./$userId/$i"
+  fi
+done
+
+printf " -> packing\n"
+tar -cvf "$userId.tar" "$userId" > tarStatus.tmp
+rm tarStatus.tmp
+gzip -f "$userId.tar"
+
+#rm -rf "$userId"
+
+printf "\nbuild finished.\n"
+echo 

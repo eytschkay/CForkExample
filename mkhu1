@@ -1,0 +1,3 @@
+#!/bin/bash
+
+gcc -Wall -o hu1 main.c
