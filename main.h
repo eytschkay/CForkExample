@@ -5,7 +5,7 @@
 #define string char*
 
 #define MAX_COMMAND 10
-#define MAX_ARGS 20
+#define MAX_ARGS 21
 
 struct Command{
     string toString;
@@ -20,15 +20,16 @@ struct Prog{
 };
 
 #define ChildProcess struct CProcess
+#define NORMAL 0
+#define SIGNALLED 1
+#define NOTCREATED 2
+#define EXECVPNOTZERO 3
+
 struct CProcess{
-    clock_t startTime;
-    clock_t endTime;
     pid_t pid;
     int userTime;
-    bool exitedWithError;
-    string task;
-    struct tms init_tms;
-    struct tms end_tms;
+    int exitStatus;
+    int index;
 };
 
 string readInput(void);

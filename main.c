@@ -1,3 +1,4 @@
+#include <error.h>
 #include "refs.h"
 
 //debug mode
@@ -72,11 +73,23 @@ string *str_replace(char *orig, char *rep, char *with) {
 //ChildProcess Functions
 void printChild(ChildProcess c){
     printf("Child Process <%d> \n", c.pid);
-    printf("-> task: %s \n", c.task);
-    printf("-> startTime: %d \n", (int) c.startTime);
-    printf("-> endTime: %d \n", (int) c.endTime);
-    printf("-> elipsed time: %d \n", (int) (c.endTime - c.startTime));
-    printf("-> failed: %d \n\n", (int) c.exitedWithError);
+    printf("-> index: %d \n", (int) c.index);
+    printf("-> user time: %d \n", (int) c.userTime);
+    char* status;
+    switch(c.exitStatus){
+        case NORMAL:
+            status = "NORMAL";
+            break;
+        case NOTCREATED:
+            status = "NOTCREATED";
+            break;
+        case SIGNALLED:
+            status = "SIGNALLED";
+            break;
+        default:
+            status = "failed to obtain status";
+    }
+    printf("-> exitStatus: %s \n\n", status);
 }
 
 //handler
@@ -96,6 +109,7 @@ int main() {
 
     //main routine
     while(!isInterrupted){
+        main_loop_entry:
 
         printf("> ");
         sum_of_usertime = 0;
@@ -116,8 +130,8 @@ int main() {
 
         //get Input
         if (fgets(input, 500, stdin) == NULL) {
-            printf("Error %d\n", errno);
-            exit(EXIT_FAILURE);
+            //printf("Error %d\n", errno);
+            exit(EXIT_SUCCESS);
         }
 
         input = str_replace(input, "\n", ";\n");
@@ -131,8 +145,15 @@ int main() {
         while(!strchr(part, '\n')){
             program.command[program.size].toString = part;
             part = strtok(NULL, ";");
-            if (program.size < MAX_COMMAND) program.size++; else perror("IndexOutOfBound: too many commands");
+            if (program.size < MAX_COMMAND) program.size++; else {
+                printf("Max %d Commands allowed\n", MAX_COMMAND);
+                goto main_loop_entry;
+            }
         }
+
+        //continue if input equals empty input
+        if(program.size == 0) continue;
+
         for (i=0; i < program.size; i++){
             string tmp = strdup(program.command[i].toString);
             program.command[i].progName = strtok(tmp, " ");
@@ -142,53 +163,77 @@ int main() {
             while(part != NULL){
                 program.command[i].args[j] = part;
                 part = strtok(NULL, " ");
-                if (j < MAX_COMMAND) j++; else perror("IndexOutOfBound: too many arguments");
+                if (j < MAX_ARGS) j++; else {
+                    printf("Max %d args allowed\n", MAX_ARGS-1);
+                    goto main_loop_entry;
+                }
             }
         }
 
         ChildProcess childProcess[program.size];
 
-        //fork
-        for (i = 0; i < program.size; i++) {
-            if ((childProcess[i].pid=fork()) == 0) {
+        for (i=0; i < program.size; i++) {
+            pid_t child_pid, rc_pid;
+            int status;
+
+            child_pid = fork(); // Hier wird eine Kopie des laufenden Prozesses erzeugt!
+            if (child_pid < 0) {
+                perror("Fork failed.");
+            } else if (child_pid == 0) {
+                // Kindprozess
                 execvp(program.command[i].progName, program.command[i].args);
-                _exit(errno); //only reached if execvp fails
+                _exit(EXIT_FAILURE);
+            } else {
+                // Vaterprozess; child_pid = Prozess-ID des Kindes
+                struct tms time_before, time_after;
+
+                times(&time_before);
+                rc_pid = wait(&status);
+                times(&time_after);
+
+                childProcess[i].pid = rc_pid;
+                childProcess[i].index = i;
+                childProcess[i].userTime = (int)(time_after.tms_cutime - time_before.tms_cutime);
+                // In "&status" erscheint der mit "return ...;" aus main() zurückgegebene Wert!
+                if (rc_pid > 0){
+                    if (WIFEXITED(status)) {
+                        if (WEXITSTATUS(status) != 0){
+                            childProcess[i].exitStatus = EXECVPNOTZERO;
+                        }else{
+                            childProcess[i].exitStatus = NORMAL;
+                        }
+                    } //child exited successfull with WEXITSTATUS(status)
+                    if (WIFSIGNALED(status)) {
+                        //printf("Child exited via signal %d\n", WTERMSIG(status));
+                        childProcess[i].exitStatus = SIGNALLED;
+                    }
+                } else { //no pid was returned
+                    if (errno != ECHILD) {
+                        perror("Unexpected Error");
+                        exit(EXIT_FAILURE);
+                    }
+                    //child does not exist
+                    childProcess[i].exitStatus = NOTCREATED;
+                }
             }
-            if (childProcess[i].pid < 0) perror("Fork error");
         }
 
-        //wait for execution
-        for (i = 0; i < program.size; i++) {
-            if (childProcess[i].pid > 0) {
-                int status;
-                childProcess[i].task = program.command[i].progName;
-
-                //measure time
-                childProcess[i].startTime = times(&childProcess[i].init_tms);
-                wait(&status);
-                //waitpid(childProcess[i].pid, &status, 0);
-                childProcess[i].endTime = times(&childProcess[i].end_tms);
-
-                if (status > 0) childProcess[i].exitedWithError = true; //error in childProcess
-            }
-            else {
-                childProcess[i].exitedWithError = true; //child did not start, error
-            }
-        }
-
+        //printout
         for(i=0; i<program.size; i++){
-            if (childProcess[i].exitedWithError) {
-                printf("%s: [execution error]\n", childProcess[i].task);
-                childProcess[i].userTime = -1;
-                continue;
+            string task = program.command[i].args[0];
+            switch(childProcess[i].exitStatus){
+                //case EXECVPNOTZERO:  //uncomment to allow non shell commands - will hide errors
+                case NORMAL:
+                    printf("%s: user time = %d\n", task, childProcess[i].userTime);
+                    sum_of_usertime += childProcess[i].userTime;
+                    break;
+                default:
+                    printf("%s: [execution error]\n", task);
             }
-            childProcess[i].userTime = childProcess[i].endTime - childProcess[i].startTime;
-            printf("%s: user time = %d\n", childProcess[i].task, childProcess[i].userTime);
-            sum_of_usertime += childProcess[i].userTime;
         }
 
-        //print sum of usertimes
-        if (program.size != 0) printf("sum of user times = %d \n", sum_of_usertime);
+       //print sum of usertimes
+       printf("sum of user times = %d \n", sum_of_usertime);
     }
 
     //code after ctrl+C
