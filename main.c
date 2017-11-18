@@ -7,37 +7,6 @@ bool debugging = false;
 bool isInterrupted = false;
 
 //input management
-string readInput(void) {
-    char * line = malloc(100), * linep = line;
-    size_t lenmax = 100, len = lenmax;
-    int c;
-
-    if(line == NULL)
-        return NULL;
-
-    for(;;) {
-        c = fgetc(stdin);
-        if(c == EOF)
-            break;
-
-        if(--len == 0) {
-            len = lenmax;
-            char * linen = realloc(linep, lenmax *= 2);
-
-            if(linen == NULL) {
-                free(linep);
-                return NULL;
-            }
-            line = linen + (line - linep);
-            linep = linen;
-        }
-
-        if((*line++ = c) == '\n')
-            break;
-    }
-    *line = '\0';
-    return linep;
-}
 string removeDoubledEmptySpaces(string str){
     char *from, *to;
     int spc=0;
@@ -53,8 +22,7 @@ string removeDoubledEmptySpaces(string str){
     }
     return str;
 }
-// You must free the result if result is non-NULL.
-char *str_replace(char *orig, char *rep, char *with) {
+string *str_replace(char *orig, char *rep, char *with) {
     char *result; // the return string
     char *ins;    // the next insert point
     char *tmp;    // varies
@@ -120,7 +88,6 @@ int main() {
 
     // vars
     Program program;
-    string input;
     int i, j;
     int sum_of_usertime;
 
@@ -132,7 +99,9 @@ int main() {
 
         printf("> ");
         sum_of_usertime = 0;
-        memset(input, 0, sizeof input);
+
+        char* input;
+        input = malloc(500 * sizeof(char));
 
 
         // init/reset program
@@ -145,15 +114,16 @@ int main() {
             }
         }
 
-
         //get Input
         if (fgets(input, 500, stdin) == NULL) {
             printf("Error %d\n", errno);
             exit(EXIT_FAILURE);
         }
 
+        input = str_replace(input, "\n", ";\n");
         input = removeDoubledEmptySpaces(input);
         input = str_replace(input, " ;", ";");
+
 
         //put input into peaces
         string part = strtok(input, ";");
@@ -194,10 +164,10 @@ int main() {
                 childProcess[i].task = program.command[i].progName;
 
                 //measure time
-                childProcess[i].startTime = times(&childProcess[i].init_tms.tms_cutime);
+                childProcess[i].startTime = times(&childProcess[i].init_tms);
                 wait(&status);
                 //waitpid(childProcess[i].pid, &status, 0);
-                childProcess[i].endTime = times(&childProcess[i].end_tms.tms_cutime);
+                childProcess[i].endTime = times(&childProcess[i].end_tms);
 
                 if (status > 0) childProcess[i].exitedWithError = true; //error in childProcess
             }
@@ -206,19 +176,15 @@ int main() {
             }
         }
 
-
-        debug(foreach(ChildProcess *c, childProcess) printChild(*c);)
-
-        //print user times
-        foreach (ChildProcess *c, childProcess) {
-            if (c->exitedWithError) {
-                printf("%s: [execution error]\n", c->task);
-                c->userTime = -1;
+        for(i=0; i<program.size; i++){
+            if (childProcess[i].exitedWithError) {
+                printf("%s: [execution error]\n", childProcess[i].task);
+                childProcess[i].userTime = -1;
                 continue;
             }
-            c->userTime = c->endTime - c->startTime;
-            printf("%s: user time = %d\n", c->task, c->userTime);
-            sum_of_usertime += c->userTime;
+            childProcess[i].userTime = childProcess[i].endTime - childProcess[i].startTime;
+            printf("%s: user time = %d\n", childProcess[i].task, childProcess[i].userTime);
+            sum_of_usertime += childProcess[i].userTime;
         }
 
         //print sum of usertimes
