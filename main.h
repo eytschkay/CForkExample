@@ -30,6 +30,7 @@ struct CProcess{
     int userTime;
     int exitStatus;
     int index;
+    bool wasEntered;
 };
 
 string readInput(void);

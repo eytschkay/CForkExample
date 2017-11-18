@@ -171,50 +171,44 @@ int main() {
         }
 
         ChildProcess childProcess[program.size];
-        pid_t child_pid, rc_pid;
-        int status;
-        for (i=0; i < program.size; i++) {
-            child_pid = fork(); // Hier wird eine Kopie des laufenden Prozesses erzeugt!
-            if (child_pid < 0) {
-                _exit(EXIT_FAILURE); //fork failed
-            } else if (child_pid == 0) {
-                // Kindprozess
+
+        for (i=0; i < program.size; i++){
+            pid_t cpid, w;
+            int status;
+
+            cpid = fork();
+            if (cpid == -1) {
+                perror("fork");
+                exit(EXIT_FAILURE);
+            }
+
+            if (cpid == 0) {            /* Code executed by child */
                 execvp(program.command[i].progName, program.command[i].args);
                 _exit(EXIT_FAILURE);
-            }
-        }
 
-        for(i=0; i< program.size; i++){
+            } else {                    /* Code executed by parent */
+                do {
+                    struct tms begin, end;
 
-            struct tms time_before, time_after;
+                    times(&begin);
+                    w = waitpid(cpid, &status, WUNTRACED | WCONTINUED);
+                    times(&end);
 
-            times(&time_before);
-            rc_pid = wait(&status);
-            times(&time_after);
-
-            childProcess[i].pid = rc_pid;
-            childProcess[i].index = i;
-            childProcess[i].userTime = (int)(time_after.tms_cutime - time_before.tms_cutime);
-            // In "&status" erscheint der mit "return ...;" aus main() zurückgegebene Wert!
-            if (rc_pid > 0){
-                if (WIFEXITED(status)) {
-                    if (WEXITSTATUS(status) != 0){
-                        childProcess[i].exitStatus = EXECVPNOTZERO;
-                    }else{
-                        childProcess[i].exitStatus = NORMAL;
+                    if (w == -1) {
+                        perror("waitpid");
+                        exit(EXIT_FAILURE);
                     }
-                } //child exited successfull with WEXITSTATUS(status)
-                if (WIFSIGNALED(status)) {
-                    //printf("Child exited via signal %d\n", WTERMSIG(status));
-                    childProcess[i].exitStatus = SIGNALLED;
-                }
-            } else { //no pid was returned
-                if (errno != ECHILD) {
-                    perror("Unexpected Error");
-                    exit(EXIT_FAILURE);
-                }
-                //child does not exist
-                childProcess[i].exitStatus = NOTCREATED;
+
+                    if (WIFEXITED(status)) {
+                        if (WEXITSTATUS(status) != 0) childProcess[i].exitStatus = EXECVPNOTZERO;
+                        else {
+                            childProcess[i].exitStatus = NORMAL;
+                            childProcess[i].userTime = (int) (end.tms_cutime - begin.tms_cutime);
+                        }
+                    } else if (WIFSIGNALED(status)) {
+                        childProcess[i].exitStatus = SIGNALLED;
+                    }
+                } while (!WIFEXITED(status) && !WIFSIGNALED(status));
             }
         }
 
