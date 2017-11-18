@@ -171,50 +171,50 @@ int main() {
         }
 
         ChildProcess childProcess[program.size];
-
+        pid_t child_pid, rc_pid;
+        int status;
         for (i=0; i < program.size; i++) {
-            pid_t child_pid, rc_pid;
-            int status;
-
             child_pid = fork(); // Hier wird eine Kopie des laufenden Prozesses erzeugt!
             if (child_pid < 0) {
-                perror("Fork failed.");
+                _exit(EXIT_FAILURE); //fork failed
             } else if (child_pid == 0) {
                 // Kindprozess
                 execvp(program.command[i].progName, program.command[i].args);
                 _exit(EXIT_FAILURE);
-            } else {
-                // Vaterprozess; child_pid = Prozess-ID des Kindes
-                struct tms time_before, time_after;
+            }
+        }
 
-                times(&time_before);
-                rc_pid = wait(&status);
-                times(&time_after);
+        for(i=0; i< program.size; i++){
 
-                childProcess[i].pid = rc_pid;
-                childProcess[i].index = i;
-                childProcess[i].userTime = (int)(time_after.tms_cutime - time_before.tms_cutime);
-                // In "&status" erscheint der mit "return ...;" aus main() zurückgegebene Wert!
-                if (rc_pid > 0){
-                    if (WIFEXITED(status)) {
-                        if (WEXITSTATUS(status) != 0){
-                            childProcess[i].exitStatus = EXECVPNOTZERO;
-                        }else{
-                            childProcess[i].exitStatus = NORMAL;
-                        }
-                    } //child exited successfull with WEXITSTATUS(status)
-                    if (WIFSIGNALED(status)) {
-                        //printf("Child exited via signal %d\n", WTERMSIG(status));
-                        childProcess[i].exitStatus = SIGNALLED;
+            struct tms time_before, time_after;
+
+            times(&time_before);
+            rc_pid = wait(&status);
+            times(&time_after);
+
+            childProcess[i].pid = rc_pid;
+            childProcess[i].index = i;
+            childProcess[i].userTime = (int)(time_after.tms_cutime - time_before.tms_cutime);
+            // In "&status" erscheint der mit "return ...;" aus main() zurückgegebene Wert!
+            if (rc_pid > 0){
+                if (WIFEXITED(status)) {
+                    if (WEXITSTATUS(status) != 0){
+                        childProcess[i].exitStatus = EXECVPNOTZERO;
+                    }else{
+                        childProcess[i].exitStatus = NORMAL;
                     }
-                } else { //no pid was returned
-                    if (errno != ECHILD) {
-                        perror("Unexpected Error");
-                        exit(EXIT_FAILURE);
-                    }
-                    //child does not exist
-                    childProcess[i].exitStatus = NOTCREATED;
+                } //child exited successfull with WEXITSTATUS(status)
+                if (WIFSIGNALED(status)) {
+                    //printf("Child exited via signal %d\n", WTERMSIG(status));
+                    childProcess[i].exitStatus = SIGNALLED;
                 }
+            } else { //no pid was returned
+                if (errno != ECHILD) {
+                    perror("Unexpected Error");
+                    exit(EXIT_FAILURE);
+                }
+                //child does not exist
+                childProcess[i].exitStatus = NOTCREATED;
             }
         }
 
