@@ -228,7 +228,7 @@ int main() {
                     sum_of_usertime += childProcess[i].userTime;
                     break;
                 default:
-                    printf("%s: [execution error]\n", task);
+                    printf("%s: [execution error]\n", task); 
             }
         }
 
