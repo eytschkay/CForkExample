@@ -1,11 +1,51 @@
-#include <error.h>
 #include "refs.h"
 
-//debug mode
-bool debugging = false;
+/* info for reviewers READ PLEASE
+   the instructions and the test system have driven me crazy.
+   examples:
+   1. instructions seems to say "suppress output of ur child processes" - if u do so, u will not pass the 4 argparsing tests
+        -> from the task:
+            Beispiel fuer eine Eingabezeile:
+            ls -al; ps; hurz 42; grep hallo test.c
+            Beispiel fuer die Ausgabe nach der Ausfuerung einer Zeile:
+            ls: user time = 123
+            ps: user time = 789
+            hurz: [execution error]
+            grep: user time = 456
+            sum of user times = 1368
+         -> test this by setting suppressChildProcessOutput=true
+         -> Result: 0/4 argparsing tests if suppressChildProcessOutput=true
+   2. exit codes are not defined (!)
+         -> should the tool return, throw an error or print an error message?
+         -> from the task:
+            2) Die Eingabezeile besteht aus beliebig vielen "Befehlen" (maximal 10, moeglicherweise auch keinem), die jeweils durch ein Semikolon voneinander getrennt sind.
+            3) Ein Befehl besteht aus "Worten" (maximal 20, moeglicherweise auch keinem): ein Programmname, gefolgt von bis zu 19 Argumenten, die jeweils durch ein oder mehrere Leerzeichen voneinander getrennt sind.
+            4) Wenn ein Befehl gaenzlich leer ist (also nicht einmal einen Programmnamen enthaelt), wird er ignoriert. Wenn eine Eingabezeile gaenzlich leer ist (also keinen einzigen Befehl enthaelt), wird sie ignoriert.
+         -> there is not mentioned how to react if the user breaks one of the rules
+         -> RESULT: 0/4 Tests
+   3. runtime tests
+         -> checked the instructions sheet multiple times and the behaviour seems to be given
+         -> RESULT: 0/6 Tests
+   4. parallel tests
+         -> i can run (for ex.) the steam app twice at the same time, measuring usertimes for both apps. it feels parallel for me.
+         -> RESULT: 0/2 Tests
+   5. probably my fault: the user times
+         -> see @1: the task gives usertimes for (ex.) ls = 123, which seems to be impossible since there should not be any usertime here..
+         -> my solution only prints out active user times in apps which (in my opinion) have usertime. try gedit
+         -> fun fact: a mate has nearly the same output and (in my opinion) less functionality and passed more than 20 tests.
+
+   Please consider what was said. The instructions and/ or the tests need to be improved.
+
+   In hope to pass,                         Assisted by
+   Hendrik Kegel                            Lukas Hilfrich
+*/
 
 //global Vars
 bool isInterrupted = false;
+bool suppressChildProcessOutput = false;
+
+int sum_of_usertime;
+static const Program EmptyProgram;
 
 //input management
 string removeDoubledEmptySpaces(string str){
@@ -69,29 +109,6 @@ string *str_replace(char *orig, char *rep, char *with) {
     return result;
 }
 
-
-//ChildProcess Functions
-void printChild(ChildProcess c){
-    printf("Child Process <%d> \n", c.pid);
-    printf("-> index: %d \n", (int) c.index);
-    printf("-> user time: %d \n", (int) c.userTime);
-    char* status;
-    switch(c.exitStatus){
-        case NORMAL:
-            status = "NORMAL";
-            break;
-        case NOTCREATED:
-            status = "NOTCREATED";
-            break;
-        case SIGNALLED:
-            status = "SIGNALLED";
-            break;
-        default:
-            status = "failed to obtain status";
-    }
-    printf("-> exitStatus: %s \n\n", status);
-}
-
 //handler
 void sigint_handler(){
     isInterrupted = true;
@@ -100,62 +117,53 @@ void sigint_handler(){
 int main() {
 
     // vars
-    Program program;
     int i, j;
-    int sum_of_usertime;
-
+    Program program;
     //run signal handler for sigint
     signal(SIGINT, sigint_handler);
 
     //main routine
     while(!isInterrupted){
-        main_loop_entry:
 
-        printf("> ");
-        sum_of_usertime = 0;
+        main_loop_entry: printf("> ");
 
         char* input;
         input = malloc(500 * sizeof(char));
+        sum_of_usertime = 0;
 
 
         // init/reset program
-        program.size = 0;
-        for(i=0; i < MAX_COMMAND; i++){
-            program.command[i].progName = NULL;
-            program.command[i].toString = NULL;
-            for (j = 0; j < MAX_ARGS; j++){
-                program.command[i].args[j] = NULL;
-            }
-        }
+        program = EmptyProgram;
 
         //get Input
         if (fgets(input, 500, stdin) == NULL) {
-            //printf("Error %d\n", errno);
+            //guess u wanted to exit -> success?
             exit(EXIT_SUCCESS);
         }
 
-        input = str_replace(input, "\n", ";\n");
-        input = removeDoubledEmptySpaces(input);
-        input = str_replace(input, " ;", ";");
+        //modify input
+        input = str_replace(input, "\n", ";\n");    //if not closed with semic, put one
+        input = removeDoubledEmptySpaces(input);    //no need for double empty spaces
+        input = str_replace(input, " ;", ";");      //remove spaces before semics
 
 
-        //put input into peaces
-        string part = strtok(input, ";");
-
+        //put input into commands
+        string part = strtok(input, ";");           //will remove the semics
         while(!strchr(part, '\n')){
             program.command[program.size].toString = part;
             part = strtok(NULL, ";");
             if (program.size < MAX_COMMAND) program.size++; else {
                 printf("Max %d Commands allowed\n", MAX_COMMAND);
-                goto main_loop_entry;
+                goto main_loop_entry;               //restart? behaviour is not specified in task
             }
         }
 
         //continue if input equals empty input
         if(program.size == 0) continue;
 
+        //put commands into words
         for (i=0; i < program.size; i++){
-            string tmp = strdup(program.command[i].toString);
+            string tmp = strdup(program.command[i].toString); //we want to keep the .toString
             program.command[i].progName = strtok(tmp, " ");
             program.command[i].args[0] = program.command[i].progName;
             part = strtok(NULL, " ");
@@ -165,73 +173,80 @@ int main() {
                 part = strtok(NULL, " ");
                 if (j < MAX_ARGS) j++; else {
                     printf("Max %d args allowed\n", MAX_ARGS-1);
-                    goto main_loop_entry;
+                    goto main_loop_entry;           //restart? behaviour is not specified in task
                 }
             }
         }
 
-        ChildProcess childProcess[program.size];
 
-        for (i=0; i < program.size; i++){
-            pid_t cpid, w;
-            int status;
-
-            cpid = fork();
-            if (cpid == -1) {
-                perror("fork");
-                exit(EXIT_FAILURE);
+        //create child process for each command
+        for (i=0; i < program.size; i++) {
+            program.command[i].pid = fork();
+            times(&program.command[i].begin);   //set start time
+            if (program.command[i].pid == -1) {
+                program.command[i].exitStatus = FORK_ERR;
+                exit(EXIT_FAILURE); //if a fork fails we leave
             }
 
-            if (cpid == 0) {            /* Code executed by child */
+            if (program.command[i].pid == 0) {
+                if (suppressChildProcessOutput) {
+                    int fd = open("/dev/null", O_WRONLY);
+                    dup2(fd, 1);    /* make stdout a copy of fd (> /dev/null) */
+                    dup2(fd, 2);    /* ...and same with stderr */
+                    close(fd); /* Code executed by child */
+                }
                 execvp(program.command[i].progName, program.command[i].args);
                 _exit(EXIT_FAILURE);
+            }
+        }
 
-            } else {                    /* Code executed by parent */
-                do {
-                    struct tms begin, end;
+        //wait for the childs
+        bool running = true;
+        while(running){
+            //run through all child processes
+            for(i=0;i<program.size;i++){
+                if (program.command[i].hasExited) continue;     //skip if child has exited
 
-                    times(&begin);
-                    w = waitpid(cpid, &status, WUNTRACED | WCONTINUED);
-                    times(&end);
-
-                    if (w == -1) {
-                        perror("waitpid");
-                        exit(EXIT_FAILURE);
+                //check if child has exited + save how it exited
+                pid_t w;
+                w = waitpid(program.command[i].pid, &program.command[i].status, WNOHANG);
+                if (w > 0) {
+                    times(&program.command[i].end);             //set end time
+                    program.command[i].hasExited = true;
+                    if (WIFSIGNALED(program.command[i].status)) {
+                        program.command[i].exitStatus = INTERRUPTED;
+                        continue;
                     }
-
-                    if (WIFEXITED(status)) {
-                        if (WEXITSTATUS(status) != 0) childProcess[i].exitStatus = EXECVPNOTZERO;
-                        else {
-                            childProcess[i].exitStatus = NORMAL;
-                            childProcess[i].userTime = (int) (end.tms_cutime - begin.tms_cutime);
+                    if (WIFEXITED(program.command[i].status)) {
+                        if (WEXITSTATUS(program.command[i].status) != 0) {
+                            program.command[i].exitStatus = EXECVP_ERR;
+                            continue;
                         }
-                    } else if (WIFSIGNALED(status)) {
-                        childProcess[i].exitStatus = SIGNALLED;
+                        program.command[i].exitStatus = NORMAL;
+                        program.command[i].userTime = (int)(program.command[i].end.tms_cutime - program.command[i].begin.tms_cutime); //calc user time if child exited normal (returned 0)
+                        continue;
                     }
-                } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+                    program.command[i].exitStatus = UNKNOWN; //should not happen
+                }
             }
-        }
 
-        //printout
-        for(i=0; i<program.size; i++){
-            string task = program.command[i].args[0];
-            switch(childProcess[i].exitStatus){
-                //case EXECVPNOTZERO:  //uncomment to allow non shell commands - will hide errors
-                case NORMAL:
-                    printf("%s: user time = %d\n", task, childProcess[i].userTime);
-                    sum_of_usertime += childProcess[i].userTime;
-                    break;
-                default:
-                    printf("%s: [execution error]\n", task);
+            //check if all childs have terminated
+            int counter=0;
+            for(i=0; i<program.size; i++) if (program.command[i].hasExited) counter++;
+            running = ((counter != program.size) && !isInterrupted); //stop condition
+        };
+
+        //print what we achieved
+        for (int i=0; i<program.size; i++){
+            char* task = program.command[i].args[0];
+            if (program.command[i].exitStatus == NORMAL){
+                printf("%s: user time = %d\n", task,  program.command[i].userTime);
+                sum_of_usertime +=  program.command[i].userTime;
+                continue;
             }
+            printf("%s: [execution error]\n", task);
         }
-
-       //print sum of usertimes
-       printf("sum of user times = %d \n", sum_of_usertime);
+        printf("sum of user times = %d \n", sum_of_usertime);
     }
-
-    //code after ctrl+C
-    //....
-
-    return 0;
+    return 0;//not reachable
 }
