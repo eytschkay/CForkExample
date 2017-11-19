@@ -33,6 +33,8 @@
          -> see @1: the task gives usertimes for (ex.) ls = 123, which seems to be impossible since there should not be any usertime here..
          -> my solution only prints out active user times in apps which (in my opinion) have usertime. try gedit
          -> fun fact: a mate has nearly the same output and (in my opinion) less functionality and passed more than 20 tests.
+   6. empty tests
+         -> not having a white space after ur ">" print will let u fail another 4 tests.
 
    Please consider what was said. The instructions and/ or the tests need to be improved.
 
